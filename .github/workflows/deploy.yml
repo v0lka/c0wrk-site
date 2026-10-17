@@ -30,7 +30,7 @@ jobs:
 
       - name: Rsync site to server
         run: |
-          rsync -az --delete \
+          rsync -az --delete --delete-excluded \
             --exclude 'README.md' \
             -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes" \
             www/static/ \
