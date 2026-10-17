@@ -1,0 +1,45 @@
+name: Deploy static site
+
+# Автодеплой статики c0wrk.ai / c0wrk.app на прод-сервер при пуше в main.
+# rsync www/static/ → /var/www/c0wrk-site/ (nginx root), затем smoke-check HTTPS.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'www/static/**'
+      - '.github/workflows/deploy.yml'
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Rsync site to server
+        run: |
+          rsync -az --delete \
+            --exclude 'README.md' \
+            -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes" \
+            www/static/ \
+            root@5.42.108.252:/var/www/c0wrk-site/
+
+      - name: Smoke check
+        run: |
+          for d in c0wrk.ai c0wrk.app; do
+            code=$(curl -fsS -o /dev/null -w '%{http_code}' "https://$d/")
+            echo "$d -> $code"
+            [ "$code" = "200" ] || exit 1
+          done
